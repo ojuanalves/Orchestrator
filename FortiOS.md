@@ -235,6 +235,7 @@ diagnose debug flow filter vd 0
 diagnose debug flow filter vd-name root
 diagnose debug flow filter proto 6
 diagnose debug flow filter addr 10.253.106.101
+diagnose debug flow filter addr 10.253.106.101 10.130.89.95
 diagnose debug flow filter saddr 177.92.88.242
 diagnose debug flow filter daddr 10.0.4.133
 diagnose debug flow filter port 5060
@@ -253,14 +254,10 @@ diagnose debug disable
 diagnose debug disable
 diagnose debug flow trace stop
 diagnose debug flow filter clear
-
-
-
 diagnose debug flow show iprope enable
 diagnose debug flow filter dport 514
 diagnose debug flow show console enable
 diagnose debug flow show function-name enable
-
 diagnose debug console timestamp enable
 diagnose debug flow trace start 999999
 diagnose debug enable
