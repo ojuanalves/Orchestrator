@@ -1,6 +1,4 @@
-# FortiOS Cheatsheet
-
-Comandos de CLI para diagnóstico, troubleshooting e configuração em FortiGate.
+# FortiOS
 
 ## Índice
 
