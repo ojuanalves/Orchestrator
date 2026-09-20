@@ -201,25 +201,22 @@ diagnose sniffer packet any "host 201.55.34.141 and host 10.211.12.68" 4
 diagnose debug disable
 diagnose debug flow trace stop
 diagnose debug flow filter clear
-
 diagnose debug flow filter saddr 10.44.114.36
 diagnose debug flow filter daddr 10.200.24.10
 diagnose debug flow filter dport 5060
-
 diagnose debug flow show console enable
 diagnose debug flow show function-name enable
+diagnose debug flow show iprope enable
 diagnose debug console timestamp enable
-
-diagnose debug flow trace start 300
+diagnose debug flow trace start 9999
 diagnose debug enable
 ```
 
-### Filtros comuns
+### Filtros
 ```fortios
-diagnose debug flow filter saddr 10.255.254.1
-diagnose debug flow filter daddr 8.8.8.8
-diagnose debug flow filter addr 10.2.54.3 10.2.35.5
-diagnose debug flow filter dport 1521
+diagnose debug flow filter saddr 177.92.88.242
+diagnose debug flow filter daddr 10.0.4.133
+diagnose debug flow filter addr 10.253.106.101 10.130.89.95
 ```
 
 ### Encerrar debug
@@ -233,9 +230,7 @@ diagnose debug disable
 diagnose debug flow trace stop
 diagnose debug flow filter clear
 
-diagnose debug flow filter saddr 177.92.88.242
-diagnose debug flow filter daddr 10.0.4.133
-diagnose debug flow filter addr 10.253.106.101 10.130.89.95
+
 
 diagnose debug flow show iprope enable
 diagnose debug flow filter dport 514
