@@ -2,17 +2,17 @@
 
 ## Índice
 
-- [Sistema e Status](#sistema-e-status)
-- [Roteamento](#roteamento)
-- [ARP](#arp)
-- [Sessões](#sessões)
-- [Ping / Traceroute / Telnet](#ping--traceroute--telnet)
+- [System & Status](#sistema-e-status)
+- [Routing](#roteamento)
+- [ARP Table](#arp)
+- [Session](#sessões)
+- [Connectivity](#ping--traceroute--telnet)
 - [Sniffer](#sniffer-de-pacotes)
 - [Debug Flow](#debug-flow)
 - [IPSec-VPN (Site-to-Site)](#vpn-ipsec-site-to-site)
 - [SSL-VPN](#ssl-vpn)
 - [SAML](#saml)
-- [Autenticação de Usuário SSL](#autenticação-de-usuário-ssl)
+- [User Authentication](#autenticação-de-usuário-ssl)
 - [FSSO](#fsso)
 - [DHCP](#dhcp)
 - [Web Filter](#web-filter)
@@ -21,7 +21,7 @@
 - [Link Monitor / SD-WAN](#link-monitor--sd-wan)
 - [Firewall Policy](#firewall-policy)
 - [Automation Stitch](#automation-stitch)
-- [Interfaces e Hardware](#interfaces-e-hardware)
+- [Interface & Hardware](#interfaces-e-hardware)
 - [API REST](#api-rest)
 
 ---
