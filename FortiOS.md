@@ -502,7 +502,6 @@ diagnose debug reset
 diagnose debug application autod -1
 diagnose debug enable
 ```
-> Referência: [Fortinet Community — Technical Tip: How to check why automation stitch is not working](https://community.fortinet.com/fortigate-3/technical-tip-how-to-check-why-automation-stitch-is-not-working-as-expected-92733)
 
 ---
 
@@ -527,7 +526,7 @@ https://192.168.1.99:11443/api/v2/cmdb/vpn.ipsec/phase1-interface/VPN_DC-WCS?pla
 
 ---
 
-## Roteamento — consulta remota (via sudo/filial)
+## Sudo: executar comandos entre VDOMs
 
 ```fortios
 sudo FILIAIS get router info routing-table details x.x.x.x
