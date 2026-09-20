@@ -7,10 +7,10 @@
 - [ARP](#arp)
 - [Sessões](#sessões)
 - [Ping / Traceroute / Telnet](#ping--traceroute--telnet)
-- [Sniffer de Pacotes](#sniffer-de-pacotes)
+- [Sniffer](#sniffer-de-pacotes)
 - [Debug Flow](#debug-flow)
-- [VPN IPSec (Site-to-Site)](#vpn-ipsec-site-to-site)
-- [SSL VPN](#ssl-vpn)
+- [IPSec-VPN (Site-to-Site)](#vpn-ipsec-site-to-site)
+- [SSL-VPN](#ssl-vpn)
 - [SAML](#saml)
 - [Autenticação de Usuário SSL](#autenticação-de-usuário-ssl)
 - [FSSO](#fsso)
@@ -415,30 +415,6 @@ exec update-now
 ```fortios
 diag firewall fqdn list | grep -i -f youtube
 ```
-
-### Criar tabela de URL Filter customizada
-```fortios
-show webfilter profile
-config web
-    set urlfilter-table 0
-    edit 0
-        set name "RAVPN-WEB-PROF"
-        config entries
-            edit 1
-                set url "*.qualys.com"
-                set type wildcard
-            next
-            edit 2
-                set url "*.santandergatewayft.com.br"
-                set type wildcard
-            next
-            edit 3
-                set url "download.docker.com"
-                set type wildcard
-            next
-        end
-    next
-end
 ```
 > Padrão: `set type wildcard` para domínios com `*`; URLs exatas (sem wildcard) não precisam do `set type`.
 
