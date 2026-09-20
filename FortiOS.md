@@ -264,7 +264,7 @@ diagnose debug flow trace start 999999
 diagnose debug enable
 ```
 
-### Direct iprope lookup (no trace)
+### Iprope Lookup
 ```fortios
 diag firewall iprope lookup 172.20.100.5 0 172.20.142.50 8400 6 RT_DMZ-ROOT0
 ```
