@@ -212,11 +212,35 @@ diagnose debug flow trace start 9999
 diagnose debug enable
 ```
 
-### Filtros
+### Filtros disponíveis (`diagnose debug flow filter ?`)
+
+| Opção | Descrição |
+|---|---|
+| `clear` | Limpa o filtro. |
+| `vd` | Índice do virtual domain (VDOM). |
+| `vd-name` | Nome do virtual domain (VDOM). |
+| `proto` | Número do protocolo (ex.: 1=ICMP, 6=TCP, 17=UDP). |
+| `addr` | Endereço IP (origem ou destino). |
+| `saddr` | Endereço IP de origem. |
+| `daddr` | Endereço IP de destino. |
+| `port` | Porta (origem ou destino). |
+| `sport` | Porta de origem. |
+| `dport` | Porta de destino. |
+| `negate` | Inverte o filtro (nega a condição informada). |
+
+### Exemplos de uso
 ```fortios
+diagnose debug flow filter clear
+diagnose debug flow filter vd 0
+diagnose debug flow filter vd-name root
+diagnose debug flow filter proto 6
+diagnose debug flow filter addr 10.253.106.101
 diagnose debug flow filter saddr 177.92.88.242
 diagnose debug flow filter daddr 10.0.4.133
-diagnose debug flow filter addr 10.253.106.101 10.130.89.95
+diagnose debug flow filter port 5060
+diagnose debug flow filter sport 5060
+diagnose debug flow filter dport 5060
+diagnose debug flow filter negate saddr 10.44.114.36
 ```
 
 ### Encerrar debug
