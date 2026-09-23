@@ -48,6 +48,7 @@ import platform
 import re
 import socket
 import sys
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -130,8 +131,29 @@ RIPESTAT = "https://stat.ripe.net/data"
 
 W = 64  # report width
 
+# Brand color used for all accents, headers and banners.
+BRAND = "165;80;167"    # #a550a7
+ALERT = "255;82;87"     # #ff5257
+
+# Old ANSI SGR codes used throughout the script are remapped here to the
+# brand palette, so every call site keeps its original semantics (alert,
+# dim, header, label...) while the actual rendered color follows the new
+# scheme. "0;90" (dim gray) and "0" (plain/reset) are left as true ANSI
+# since they represent "no data" / neutral text, not brand accents.
+_COLOR_MAP = {
+    "1;35": f"1;38;2;{BRAND}",   # banners / boxes -> brand, bold
+    "1;36": f"1;38;2;{BRAND}",   # section headers -> brand, bold
+    "0;36": f"38;2;{BRAND}",     # sub-headers -> brand
+    "1;37": f"1;38;2;{BRAND}",   # emphasized value (e.g. the IP itself) -> brand, bold
+    "0;33": f"38;2;{BRAND}",     # advisory notes -> brand
+    "1;33": f"1;38;2;{BRAND}",   # highlighted note -> brand, bold
+    "1;31": f"1;38;2;{ALERT}",   # alerts -> red
+    "0;37": f"38;2;{BRAND}",     # field labels -> brand
+}
+
 
 def c(text, code):
+    code = _COLOR_MAP.get(code, code)
     return f"\033[{code}m{text}\033[0m"
 
 
@@ -797,6 +819,52 @@ VERDICT_BANNER = r"""
      \/    |______|_|  \_\|_____/|_____\_____|  |_|
 """
 
+# ---------------------------------------------------------------------------
+# Loading bar animation
+# ---------------------------------------------------------------------------
+
+BAR_WIDTH = 28
+
+
+class LoadingBar:
+    """Renders an indeterminate progress bar, in place, on one terminal
+    line, while background work (network lookups) runs."""
+
+    def __init__(self, label="Investigating"):
+        self.label = label
+        self._stop = threading.Event()
+        self._thread = None
+
+    def _spin(self):
+        pos = 0
+        direction = 1
+        while not self._stop.is_set():
+            filled = "█" * 4
+            bar = ["░"] * BAR_WIDTH
+            for i in range(4):
+                idx = pos + i
+                if 0 <= idx < BAR_WIDTH:
+                    bar[idx] = filled[i]
+            bar_str = "".join(bar)
+            line = f"  {c(self.label + '...', '0;90')}  {c('[' + bar_str + ']', '1;35')}"
+            sys.stdout.write("\r" + line + " " * 4)
+            sys.stdout.flush()
+            pos += direction
+            if pos >= BAR_WIDTH - 4 or pos <= 0:
+                direction *= -1
+            self._stop.wait(0.05)
+
+    def start(self):
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=1)
+        sys.stdout.write("\r" + " " * 70 + "\r")
+        sys.stdout.flush()
+
 
 def investigate(ip, raw=False, as_json=False):
     if not as_json:
@@ -806,37 +874,92 @@ def investigate(ip, raw=False, as_json=False):
         print(c(f"║{ip:^{W}}║", "1;37"))
         print(c(f"║{time.strftime('%Y-%m-%d %H:%M:%S'):^{W}}║", "0;90"))
         print(c("╚" + "═" * W + "╝", "1;35"))
-        print(c("\n  Applying verdict...", "0;90"), end="", flush=True)
+        print()
 
-    b = {"properties": address_properties(ip)}
+def quick_summary(ip, b):
+    """Prints an at-a-glance summary from the fastest sources (geolocation
+    + reverse DNS) as soon as they land, before the full dossier is ready."""
+    ipapi, ipcom, ipwho = ok(b.get("ipapi_is", {})), ok(b.get("ip_api_com", {})), ok(b.get("ipwho_is", {}))
+    dns = b.get("dns") or {}
 
-    with ThreadPoolExecutor(max_workers=10) as ex:
-        futs = {
-            "ipapi_is": ex.submit(src_ipapi_is, ip),
-            "ip_api_com": ex.submit(src_ip_api_com, ip),
-            "ipwho_is": ex.submit(src_ipwho_is, ip),
-            "rdap": ex.submit(src_rdap, ip),
-            "ripe_network": ex.submit(src_ripe_network, ip),
-            "ripe_abuse": ex.submit(src_ripe_abuse, ip),
-            "ripe_routing": ex.submit(src_ripe_routing, ip),
-            "dns": ex.submit(src_reverse_dns, ip),
-            "dnsbl": ex.submit(query_all_dnsbl, ip),
-            "tor": ex.submit(query_tor, ip),
-        }
-        for k, f in futs.items():
-            b[k] = f.result()
+    loc = sub(ipapi, "location")
+    country = (f"{loc.get('country')} ({loc.get('country_code')})" if loc.get("country") else None) \
+        or (f"{ipcom.get('country')} ({ipcom.get('countryCode')})" if ipcom.get("country") else None) \
+        or (f"{ipwho.get('country')} ({ipwho.get('country_code')})" if ipwho.get("country") else None)
+    city = (f"{loc.get('city')}, {loc.get('state')}" if loc.get("city") else None) \
+        or (f"{ipcom.get('city')}, {ipcom.get('regionName')}" if ipcom.get("city") else None) \
+        or (f"{ipwho.get('city')}, {ipwho.get('region')}" if ipwho.get("city") else None)
+    isp = (sub(ipapi, "company").get("name") or ipapi.get("org")) or ipcom.get("isp") \
+        or (sub(ipwho, "connection").get("isp"))
 
-    rnet = ok(b["ripe_network"])
-    asns = rnet.get("asns") or []
-    asn = str(asns[0]) if asns else (str(sub(ok(b["ipapi_is"]), "asn").get("asn") or "") or None)
-    prefix = rnet.get("prefix") or sub(ok(b["ipapi_is"]), "asn").get("route")
+    section("QUICK SUMMARY")
+    row("Country", country)
+    row("City, region", city)
+    row("ISP / org", isp)
+    row("PTR record", dns.get("ptr") or dns.get("error"), dim=not dns.get("ptr"))
+    print(c("\n  Continuing full lookup in the background...", "0;90"))
 
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        fa, fr = ex.submit(src_ripe_as, asn), ex.submit(src_ripe_rpki, asn, prefix)
-        b["ripe_as"], b["ripe_rpki"] = fa.result(), fr.result()
 
+def investigate(ip, raw=False, as_json=False):
     if not as_json:
-        print("\r" + " " * 30 + "\r", end="")
+        print(c(VERDICT_BANNER, "1;35"))
+        print(c("╔" + "═" * W + "╗", "1;35"))
+        print(c(f"║{'IP INTELLIGENCE REPORT':^{W}}║", "1;35"))
+        print(c(f"║{ip:^{W}}║", "1;37"))
+        print(c(f"║{time.strftime('%Y-%m-%d %H:%M:%S'):^{W}}║", "0;90"))
+        print(c("╚" + "═" * W + "╝", "1;35"))
+        print()
+
+    bar = None
+    if not as_json:
+        bar = LoadingBar("Investigating")
+        bar.start()
+
+    try:
+        b = {"properties": address_properties(ip)}
+
+        with ThreadPoolExecutor(max_workers=10) as ex:
+            futs = {
+                "ipapi_is": ex.submit(src_ipapi_is, ip),
+                "ip_api_com": ex.submit(src_ip_api_com, ip),
+                "ipwho_is": ex.submit(src_ipwho_is, ip),
+                "rdap": ex.submit(src_rdap, ip),
+                "ripe_network": ex.submit(src_ripe_network, ip),
+                "ripe_abuse": ex.submit(src_ripe_abuse, ip),
+                "ripe_routing": ex.submit(src_ripe_routing, ip),
+                "dns": ex.submit(src_reverse_dns, ip),
+                "dnsbl": ex.submit(query_all_dnsbl, ip),
+                "tor": ex.submit(query_tor, ip),
+            }
+
+            # Geolocation + reverse DNS are the fastest sources. As soon as
+            # all four land, show a quick summary while the rest (RDAP,
+            # RIPEstat, DNSBL, Tor) keeps running in the background.
+            quick_keys = ("ipapi_is", "ip_api_com", "ipwho_is", "dns")
+            for k in quick_keys:
+                b[k] = futs[k].result()
+
+            if not as_json:
+                bar.stop()
+                quick_summary(ip, b)
+                bar = LoadingBar("Compiling full dossier")
+                bar.start()
+
+            for k, f in futs.items():
+                if k not in quick_keys:
+                    b[k] = f.result()
+
+        rnet = ok(b["ripe_network"])
+        asns = rnet.get("asns") or []
+        asn = str(asns[0]) if asns else (str(sub(ok(b["ipapi_is"]), "asn").get("asn") or "") or None)
+        prefix = rnet.get("prefix") or sub(ok(b["ipapi_is"]), "asn").get("route")
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fa, fr = ex.submit(src_ripe_as, asn), ex.submit(src_ripe_rpki, asn, prefix)
+            b["ripe_as"], b["ripe_rpki"] = fa.result(), fr.result()
+    finally:
+        if bar:
+            bar.stop()
 
     merged = merge(ip, b)
 
@@ -905,18 +1028,94 @@ def pause_on_windows():
         input("\nPress ENTER to close...")
 
 
+def parse_ip_list(raw):
+    """Splits a raw string on ',' and/or '/', trims whitespace, drops empties,
+    and removes duplicates while preserving order."""
+    pieces = re.split(r"[,/]", raw)
+    seen = set()
+    out = []
+    for piece in pieces:
+        candidate = piece.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        out.append(candidate)
+    return out
+
+
+def prompt_banner():
+    box_w = W
+    print(c("\n╔" + "═" * box_w + "╗", "1;35"))
+    print(c(f"║{'IP ADDRESS TO INVESTIGATE':^{box_w}}║", "1;35"))
+    print(c(f"║{'(one or more, separated by , or /)':^{box_w}}║", "0;90"))
+    print(c("╚" + "═" * box_w + "╝", "1;35"))
+
+
 def main():
     try:
         flags = [a for a in sys.argv[1:] if a.startswith("--")]
         args = [a for a in sys.argv[1:] if not a.startswith("--")]
-        ip = args[0].strip() if args else input("IP address to investigate: ").strip()
 
-        if not valid_ip(ip):
-            print(c(f"Not a valid IP address: '{ip}'", "1;31"))
+        if args:
+            raw_input_str = args[0].strip()
+        else:
+            prompt_banner()
+            raw_input_str = input(c("  ➤ ", "1;36")).strip()
+
+        candidates = parse_ip_list(raw_input_str)
+
+        if not candidates:
+            print(c("No IP address provided.", "1;31"))
             pause_on_windows()
             sys.exit(1)
 
-        investigate(ip, raw="--raw" in flags, as_json="--json" in flags)
+        valid_ips, invalid_ips = [], []
+        for candidate in candidates:
+            (valid_ips if valid_ip(candidate) else invalid_ips).append(candidate)
+
+        for bad in invalid_ips:
+            print(c(f"Not a valid IP address, skipping: '{bad}'", "1;31"))
+
+        if not valid_ips:
+            pause_on_windows()
+            sys.exit(1)
+
+        as_json = "--json" in flags
+        raw = "--raw" in flags
+
+        if as_json and len(valid_ips) > 1:
+            results = {}
+            for ip in valid_ips:
+                b = {"properties": address_properties(ip)}
+                with ThreadPoolExecutor(max_workers=10) as ex:
+                    futs = {
+                        "ipapi_is": ex.submit(src_ipapi_is, ip),
+                        "ip_api_com": ex.submit(src_ip_api_com, ip),
+                        "ipwho_is": ex.submit(src_ipwho_is, ip),
+                        "rdap": ex.submit(src_rdap, ip),
+                        "ripe_network": ex.submit(src_ripe_network, ip),
+                        "ripe_abuse": ex.submit(src_ripe_abuse, ip),
+                        "ripe_routing": ex.submit(src_ripe_routing, ip),
+                        "dns": ex.submit(src_reverse_dns, ip),
+                        "dnsbl": ex.submit(query_all_dnsbl, ip),
+                        "tor": ex.submit(query_tor, ip),
+                    }
+                    for k, f in futs.items():
+                        b[k] = f.result()
+                rnet = ok(b["ripe_network"])
+                asns = rnet.get("asns") or []
+                asn = str(asns[0]) if asns else (str(sub(ok(b["ipapi_is"]), "asn").get("asn") or "") or None)
+                prefix = rnet.get("prefix") or sub(ok(b["ipapi_is"]), "asn").get("route")
+                with ThreadPoolExecutor(max_workers=2) as ex:
+                    fa, fr = ex.submit(src_ripe_as, asn), ex.submit(src_ripe_rpki, asn, prefix)
+                    b["ripe_as"], b["ripe_rpki"] = fa.result(), fr.result()
+                results[ip] = merge(ip, b)
+            print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
+        else:
+            for i, ip in enumerate(valid_ips):
+                if i > 0 and not as_json:
+                    print(c("\n" + "═" * W, "1;35"))
+                investigate(ip, raw=raw, as_json=as_json)
 
     except KeyboardInterrupt:
         print(c("\nInterrupted.", "0;90"))
